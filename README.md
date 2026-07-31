@@ -9,8 +9,8 @@ This replicates a Claude Code setup built around three ideas:
 ## Quick start
 
 ```bash
-git clone <this-repo-or-copy-this-folder> claude_setup
-cd claude_setup
+git clone https://github.com/sai-kiran-dexur/claude-setup-kit.git
+cd claude-setup-kit
 ./setup.sh
 ```
 
