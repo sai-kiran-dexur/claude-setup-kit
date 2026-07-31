@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Auto-commit and push ~/brain if anything changed
+cd ~/brain || exit 0
+git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ] && exit 0
+git add -A
+git commit -m "auto: brain sync $(date '+%Y-%m-%d %H:%M')"
+git push

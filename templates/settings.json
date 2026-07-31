@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.local/bin/brain-sync >> /tmp/brain-sync.log 2>&1 || true",
+            "statusMessage": "Syncing brain vault...",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "tui": "fullscreen",
+  "theme": "dark"
+}
