@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# brain-sync — commit and push ~/brain, safely and not too often.
+#
+#   brain-sync          debounced: commits only if the last brain commit is older than BRAIN_SYNC_MIN_AGE (Stop hook)
+#   brain-sync --force  commit now (SessionEnd hook, midnight cron, manual flush)
+#
+# Gates every commit through gitleaks (secrets) and brain-phi-scan (PHI-shaped values).
+# Anything that blocks or fails is written to ~/brain/.sync-health, which brain-context
+# shows at the start of the next Claude session. Touch ~/brain/.sync-paused to pause.
+set -uo pipefail
+
+BRAIN=${BRAIN_DIR:-$HOME/brain}
+BIN=$(dirname "$(readlink -f "$0")")
+MIN_AGE=${BRAIN_SYNC_MIN_AGE:-1800}
+HEALTH=$BRAIN/.sync-health
+FORCE=0; [[ ${1:-} == --force ]] && FORCE=1
+export PATH="$HOME/.local/bin:$PATH"
+
+cd "$BRAIN" 2>/dev/null || exit 0
+[[ -e .sync-paused ]] && exit 0
+
+exec 9>"$BRAIN/.sync-lock"
+flock -n 9 || exit 0   # another sync is running
+
+health() { printf '%s — %s\n' "$(date '+%Y-%m-%d %H:%M %Z')" "$*" > "$HEALTH"; echo "brain-sync: $*" >&2; }
+
+[[ -x $BIN/brain-index ]] && "$BIN/brain-index" >/dev/null 2>&1
+
+push_if_ahead() {
+  local ahead
+  ahead=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo 1)
+  (( ahead == 0 )) && return 0
+  git push -q 2>/dev/null && return 0
+  { git pull -q --rebase --autostash && git push -q; } 2>/dev/null && return 0
+  health "FAILED: push to $(git remote get-url origin 2>/dev/null) failed — $ahead commit(s) are local only. Check 'cd ~/brain && git status && git push'."
+  return 1
+}
+
+git add -A
+if git diff --cached --quiet; then
+  push_if_ahead && rm -f "$HEALTH"
+  exit $?
+fi
+
+if (( ! FORCE )); then
+  last=$(git log -1 --format=%ct 2>/dev/null || echo 0)
+  if (( $(date +%s) - last < MIN_AGE )); then
+    git reset -q
+    exit 0
+  fi
+fi
+
+if command -v gitleaks >/dev/null; then
+  if ! gitleaks git --pre-commit --staged --redact --no-banner --log-level error . >/dev/null 2>&1; then
+    git reset -q
+    health "BLOCKED: gitleaks found a secret in staged changes. Run 'cd ~/brain && gitleaks git --pre-commit --staged --redact -v', fix the note, then 'brain-sync --force'."
+    exit 1
+  fi
+else
+  health "WARNING: gitleaks not installed — secrets are not being checked."
+fi
+
+if ! phi=$("$BIN/brain-phi-scan" --staged .); then
+  git reset -q
+  health "BLOCKED: PHI-shaped values in staged changes (use 12345678 / V12345678 placeholders): $(echo "$phi" | head -5 | tr '\n' ' ')— fix, then 'brain-sync --force'."
+  exit 1
+fi
+
+mapfile -t changed < <(git diff --cached --name-only | grep '\.md$' | grep -v '^00-index\.md$' | xargs -r -n1 basename | sed 's/\.md$//' | sort -u)
+msg="brain: $(printf '%s, ' "${changed[@]:0:4}" | sed 's/, $//')"
+(( ${#changed[@]} > 4 )) && msg+=" +$(( ${#changed[@]} - 4 )) more"
+(( ${#changed[@]} == 0 )) && msg="brain: housekeeping"
+
+if ! git commit -q -m "$msg"; then
+  health "FAILED: git commit failed in ~/brain."
+  exit 1
+fi
+
+push_if_ahead || exit 1
+rm -f "$HEALTH"

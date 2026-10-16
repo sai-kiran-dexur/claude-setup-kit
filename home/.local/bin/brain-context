@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# brain-context — SessionStart hook: inject the current repo's brain card into the session.
+#
+# Resolves the repo from $CLAUDE_PROJECT_DIR (worktrees map to their parent repo), finds
+# ~/brain/repos/<repo>.md, and prints it with a pointer to its history log and any
+# brain-sync health warning. Output stays under the 10,000-char hook context cap.
+set -uo pipefail
+
+BRAIN=${BRAIN_DIR:-$HOME/brain}
+CAP=9900
+BUDGET=9500
+
+input=$(cat 2>/dev/null || true)
+dir=${CLAUDE_PROJECT_DIR:-}
+[[ -z $dir ]] && dir=$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null)
+[[ -z $dir ]] && dir=$PWD
+
+is_repo=0
+if common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+  is_repo=1
+  # /x/repo/.git -> repo ; bare or unusual layouts fall back to the toplevel name
+  if [[ $(basename "$common") == .git ]]; then name=$(basename "$(dirname "$common")")
+  else name=$(basename "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")"); fi
+else
+  name=$(basename "$dir")
+fi
+
+# exact match first, then case-insensitive with - and _ treated alike
+card="$BRAIN/repos/$name.md"
+if [[ ! -f $card ]]; then
+  norm() { tr '[:upper:]_' '[:lower:]-' <<<"$1"; }
+  want=$(norm "$name")
+  for f in "$BRAIN"/repos/*.md; do
+    [[ $(norm "$(basename "$f" .md)") == "$want" ]] && { card=$f; break; }
+  done
+fi
+
+footer=""
+if [[ -s $BRAIN/.sync-health ]]; then
+  footer+=$'\n'"⚠ brain-sync needs attention: $(head -c 600 "$BRAIN/.sync-health")"
+fi
+
+if [[ -f $card ]]; then
+  cname=$(basename "$card" .md)
+  log="$BRAIN/logs/$cname.md"
+  header="# Brain card: $cname  (~/brain/repos/$cname.md — current truth; edit it in place, delete stale facts)"
+  if [[ -f $log ]]; then
+    footer=$'\n---\n'"History: ~/brain/logs/$cname.md ($(wc -l < "$log") lines) — grep it for detail; don't read it whole."$footer
+  fi
+  size=$(wc -c < "$card")
+  if (( size <= BUDGET )); then
+    body=$(cat "$card")
+  else
+    body=$(head -c 3000 "$card")
+    body+=$'\n\n'"[TRUNCATED: this note is $(( size / 1024 )) KB, over the ${BUDGET}-char card budget; its newest content is at the BOTTOM and is not shown. Grep the file for recent dated entries, and run the brain-distill skill to turn it into a card.]"
+  fi
+  room=$(( CAP - ${#header} - ${#footer} - 4 ))
+  (( ${#body} > room )) && body="${body:0:room}"$'\n[…cut to fit the context cap]'
+  printf '%s\n\n%s\n%s\n' "$header" "$body" "$footer"
+elif (( is_repo )); then
+  printf '%s\n%s\n' "No brain card for '$name'. If you learn durable facts about this repo, create ~/brain/repos/$name.md from ~/brain/templates/card.md." "$footer"
+elif [[ -n $footer ]]; then
+  printf '%s\n' "$footer"
+fi
+exit 0

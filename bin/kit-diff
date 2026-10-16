@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# kit-diff — show drift between the live setup and the kit. Exit 1 if anything differs.
+set -uo pipefail
+
+KIT=$(cd "$(dirname "$0")/.." && pwd)
+PRIV=${KIT_PRIVATE:-$HOME/brain/system/claude}
+drift=0
+
+check() { # live kit
+  if [[ ! -e $2 ]]; then echo "missing in kit: $2"; drift=1
+  elif ! diff -rq "$1" "$2" >/dev/null 2>&1; then echo "--- drift: $1"; diff -ru "$2" "$1" | head -40; drift=1; fi
+}
+
+for f in "$KIT"/home/.local/bin/*; do check "$HOME/.local/bin/$(basename "$f")" "$f"; done
+for d in "$KIT"/home/.claude/skills/*/; do check "$HOME/.claude/skills/$(basename "$d")" "${d%/}"; done
+check "$HOME/.claude/settings.json" "$PRIV/settings.json"
+check "$HOME/.claude/CLAUDE.md"     "$PRIV/CLAUDE.md"
+
+if [[ -f $PRIV/plugins.txt ]]; then
+  diff <(sort "$PRIV/plugins.txt") <(jq -r '.plugins | keys[]' "$HOME/.claude/plugins/installed_plugins.json" | sort) >/dev/null \
+    || { echo "--- drift: installed plugins differ from $PRIV/plugins.txt"; drift=1; }
+fi
+if [[ -f $PRIV/mcp-servers.json ]]; then
+  diff <(jq -S 'keys' "$PRIV/mcp-servers.json") <(jq -S '(.mcpServers // {}) | keys' "$HOME/.claude.json") >/dev/null \
+    || { echo "--- drift: user MCP server set differs from $PRIV/mcp-servers.json"; drift=1; }
+fi
+
+(( drift )) && echo "→ run bin/kit-export to snapshot the live setup" || echo "kit-diff: no drift"
+exit $drift

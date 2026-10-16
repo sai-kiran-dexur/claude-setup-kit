@@ -1,18 +1,48 @@
 {
+  "permissions": {
+    "allow": [
+      "Read(~/brain/**)",
+      "Edit(~/brain/**)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Read(**/.env.prod*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
+    ],
+    "additionalDirectories": [
+      "__HOME__/brain"
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "autoMemoryEnabled": false,
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "bash ~/.local/bin/brain-context", "timeout": 10 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.local/bin/brain-sync >> /tmp/brain-sync.log 2>&1 || true",
-            "statusMessage": "Syncing brain vault...",
-            "async": true
-          }
+          { "type": "command", "command": "bash ~/.local/bin/brain-sync >> /tmp/brain-sync.log 2>&1 || true", "async": true }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash ~/.local/bin/brain-sync --force >> /tmp/brain-sync.log 2>&1 || true", "timeout": 30 }
         ]
       }
     ]
-  },
-  "tui": "fullscreen",
-  "theme": "dark"
+  }
 }
