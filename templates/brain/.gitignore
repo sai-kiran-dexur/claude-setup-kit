@@ -1,0 +1,6 @@
+# brain-sync state (lock, health, pause flag)
+.sync-*
+# Obsidian per-device UI state — changes on every click
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.trash/

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# kit-export — snapshot the live Claude Code setup into the kit.
+#
+# Generic, shareable files  -> this repo (home/)            — safe for a public repo
+# Personal layer             -> $KIT_PRIVATE (default ~/brain/system/claude) — private:
+#   settings.json, CLAUDE.md, MCP servers (env values redacted), plugin list, cron line
+#
+# Never exports credentials, ~/.claude.json, sessions, projects or transcripts.
+set -euo pipefail
+
+KIT=$(cd "$(dirname "$0")/.." && pwd)
+PRIV=${KIT_PRIVATE:-$HOME/brain/system/claude}
+SCRIPTS=(brain-sync brain-context brain-index brain-phi-scan)
+SKILLS=(git-commit brain-distill)
+
+mkdir -p "$KIT/home/.local/bin" "$KIT/home/.claude/skills" "$KIT/templates/brain/templates" "$PRIV"
+
+for s in "${SCRIPTS[@]}"; do install -m 0755 "$HOME/.local/bin/$s" "$KIT/home/.local/bin/$s"; done
+for s in "${SKILLS[@]}"; do
+  rm -rf "$KIT/home/.claude/skills/$s"
+  cp -r "$HOME/.claude/skills/$s" "$KIT/home/.claude/skills/$s"
+done
+install -m 0644 "$HOME/brain/templates/card.md" "$KIT/templates/brain/templates/card.md"
+install -m 0644 "$HOME/brain/.gitignore"        "$KIT/templates/brain/.gitignore"
+
+install -m 0644 "$HOME/.claude/settings.json" "$PRIV/settings.json"
+install -m 0644 "$HOME/.claude/CLAUDE.md"     "$PRIV/CLAUDE.md"
+jq '(.mcpServers // {}) | map_values(if .env then .env |= map_values("<redacted>") else . end
+                                     | if .headers then .headers |= map_values("<redacted>") else . end)' \
+  "$HOME/.claude.json" > "$PRIV/mcp-servers.json"
+jq -r '.plugins | keys[]' "$HOME/.claude/plugins/installed_plugins.json" | sort > "$PRIV/plugins.txt"
+crontab -l 2>/dev/null | grep -F brain-sync > "$PRIV/crontab.txt" || true
+
+echo "kit-export: generic -> $KIT/home  ·  personal -> $PRIV"

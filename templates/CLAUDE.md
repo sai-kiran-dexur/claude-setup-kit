@@ -1,13 +1,18 @@
 # Claude Code — User Instructions
 
-## Brain vault
-All repo knowledge is at `~/brain/`. Read the relevant `~/brain/repos/<name>.md` before starting work on any repo. Write all findings and updates there — not in conversation.
+## Brain vault (`~/brain`) — the single memory store
+- A SessionStart hook injects this repo's **card** (`~/brain/repos/<repo>.md`: current truth, ≤9,500 chars). Full history is in `~/brain/logs/<repo>.md` — grep it, never read it whole.
+- When you learn something durable: **edit the card in place** (delete facts that stopped being true) and append dated evidence to the log. A correction or retraction updates the card in the same turn.
+- Facts true for the whole team also belong in the repo's own `CLAUDE.md` (via branch + PR).
+- Cross-repo notes live in `~/brain/areas/`. Built-in auto-memory is off — never write to `~/.claude/projects/*/memory/`.
+- No PHI or secrets in the vault; brain-sync blocks them. A card over budget or a "TRUNCATED" note → use the `brain-distill` skill.
+
+@~/brain/areas/working-with-claude.md
 
 ## Rules
-<!-- Your hard rules — things Claude must never get wrong. Examples of the kind of thing that belongs here: -->
-- <e.g. "No sudo. All installs go to ~/.local/bin.">
-- <e.g. "Never commit real customer data / secrets — use placeholder values.">
-- <e.g. repo-specific gotchas: "project-x: always run with --workers 1">
+- <machine rules, e.g. "No sudo on this machine; services via Docker, CLIs to ~/.local/bin">
+- <data rules, e.g. "Never commit real customer identifiers; use placeholders">
+- <one line per repo-specific gotcha that must hold everywhere>
 
 ## Profile
-<Your role + stack in one line, e.g. "Backend dev at Acme (fintech). Ubuntu 24.04. email: you@example.com">
+<role, company, OS>
